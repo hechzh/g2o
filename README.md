@@ -117,3 +117,6 @@ Giorgio Grisetti <grisetti@dis.uniroma1.it>
 Hauke Strasdat <strasdat@gmail.com>   
 Kurt Konolige <konolige@willowgarage.com>   
 Wolfram Burgard <burgard@informatik.uni-freiburg.de>   
+
+### More information
+The project isn't setted by me but i want to do some test and optimization on it.

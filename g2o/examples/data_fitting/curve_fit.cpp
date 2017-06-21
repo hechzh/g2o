@@ -107,90 +107,117 @@ class EdgePointOnCurve : public g2o::BaseUnaryEdge<1, Eigen::Vector2d, VertexPar
       const double& lambda = params->estimate()(2);
       double fval = a * exp(-lambda * measurement()(0)) + b;
       _error(0) = fval - measurement()(1);
+      ///error+=abs(_error(0));
+      ///cout << error << endl;
     }
 };
 
 int main(int argc, char** argv)
 {
-  int numPoints;
-  int maxIterations;
-  bool verbose;
-  std::vector<int> gaugeList;
-  string dumpFilename;
-  g2o::CommandArgs arg;
-  arg.param("dump", dumpFilename, "", "dump the points into a file");
-  arg.param("numPoints", numPoints, 50, "number of points sampled from the curve");
-  arg.param("i", maxIterations, 10, "perform n iterations");
-  arg.param("v", verbose, false, "verbose output of the optimization process");
+    double inf=0.01;
+    double error=0;
+    for (int j=0 ;j<10;++j) {
+        int numPoints;
+        int maxIterations;
+        bool verbose;
+        std::vector<int> gaugeList;
+        string dumpFilename;
+        g2o::CommandArgs arg;
+        arg.param("dump", dumpFilename, "", "dump the points into a file");
+        arg.param("numPoints", numPoints, 100, "number of points sampled from the curve");
+        arg.param("i", maxIterations, 20, "perform n iterations");
+        arg.param("v", verbose, false, "verbose output of the optimization process");
 
-  arg.parseArgs(argc, argv);
-
-  // generate random data
-  double a = 2.1;
-  double b = 0.4;
-  double lambda = 0.2;
-  Eigen::Vector2d* points = new Eigen::Vector2d[numPoints];
-  for (int i = 0; i < numPoints; ++i) {
-    double x = g2o::Sampler::uniformRand(0, 10);
-    double y = a * exp(-lambda * x) + b;
-    // add Gaussian noise
-    y += g2o::Sampler::gaussRand(0, 0.02);
-    points[i].x() = x;
-    points[i].y() = y;
+        arg.parseArgs(argc, argv);
+        // generate random data
+        double a = 2.1;
+        double b = 0.4;
+        double lambda = 0.2;
+        Eigen::Vector2d *points = new Eigen::Vector2d[numPoints];
+        cout << "y = [";
+        for (int i = 0; i < numPoints; ++i) {
+            double xup = g2o::Sampler::uniformRand(0, 5);
+            double xdown = g2o::Sampler::uniformRand(0, 5);
+            double x = pow(pow(xup, 2) + pow(xdown, 2), 0.5);
+            double y = a * exp(-lambda * x) + b;
+            // add Gaussian noise
+            y += g2o::Sampler::gaussRand(0, inf + 0.01 * j);
+            points[i].x() = x;
+            points[i].y() = y;
+            if ( i < numPoints-1){cout << xup << "," << xdown << "," << points[i].y() << ";";}
+            else{cout<< xup << "," << xdown << "," << points[i].y() << "];" << endl;}
+        }
+/**
+  for (int i=0;i<numPoints;i++){
+      double x=i/10.0;
+      points[i].x()=x;
+      points[i].y()=a * exp(-lambda * x) + b+g2o::Sampler::gaussRand(0, 0.2);
+      cout<<points[i].y()<<",";
   }
+*/
+        if (dumpFilename.size() > 0) {
+            ofstream fout(dumpFilename.c_str());
+            for (int i = 0; i < numPoints; ++i)
+                fout << points[i].transpose() << endl;
+        }
 
-  if (dumpFilename.size() > 0) {
-    ofstream fout(dumpFilename.c_str());
-    for (int i = 0; i < numPoints; ++i)
-      fout << points[i].transpose() << endl;
-  }
+        // some handy typedefs
+        typedef g2o::BlockSolver<g2o::BlockSolverTraits<Eigen::Dynamic, Eigen::Dynamic> > MyBlockSolver;
+        typedef g2o::LinearSolverDense<MyBlockSolver::PoseMatrixType> MyLinearSolver;
 
-  // some handy typedefs
-  typedef g2o::BlockSolver< g2o::BlockSolverTraits<Eigen::Dynamic, Eigen::Dynamic> >  MyBlockSolver;
-  typedef g2o::LinearSolverDense<MyBlockSolver::PoseMatrixType> MyLinearSolver;
+        // setup the solver
+        g2o::SparseOptimizer optimizer;
+        optimizer.setVerbose(false);
+        MyLinearSolver *linearSolver = new MyLinearSolver();
+        MyBlockSolver *solver_ptr = new MyBlockSolver(linearSolver);
+        g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+        optimizer.setAlgorithm(solver);
 
-  // setup the solver
-  g2o::SparseOptimizer optimizer;
-  optimizer.setVerbose(false);
-  MyLinearSolver* linearSolver = new MyLinearSolver();
-  MyBlockSolver* solver_ptr = new MyBlockSolver(linearSolver);
-  g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-  optimizer.setAlgorithm(solver);
+        // build the optimization problem given the points
+        // 1. add the parameter vertex
+        VertexParams *params = new VertexParams();
+        params->setId(0);
+        params->setEstimate(Eigen::Vector3d(1, 1, 1)); // some initial value for the params
+        optimizer.addVertex(params);
+        // 2. add the points we measured to be on the curve
+        for (int i = 0; i < numPoints; ++i) {
+            EdgePointOnCurve *e = new EdgePointOnCurve;
+            e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
+            e->setVertex(0, params);
+            e->setMeasurement(points[i]);
+            optimizer.addEdge(e);
+        }
 
-  // build the optimization problem given the points
-  // 1. add the parameter vertex
-  VertexParams* params = new VertexParams();
-  params->setId(0);
-  params->setEstimate(Eigen::Vector3d(1,1,1)); // some initial value for the params
-  optimizer.addVertex(params);
-  // 2. add the points we measured to be on the curve
-  for (int i = 0; i < numPoints; ++i) {
-    EdgePointOnCurve* e = new EdgePointOnCurve;
-    e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
-    e->setVertex(0, params);
-    e->setMeasurement(points[i]);
-    optimizer.addEdge(e);
-  }
+        // perform the optimization
+        optimizer.initializeOptimization();
+        optimizer.setVerbose(verbose);
+        optimizer.optimize(maxIterations);
 
-  // perform the optimization
-  optimizer.initializeOptimization();
-  optimizer.setVerbose(verbose);
-  optimizer.optimize(maxIterations);
-
-  if (verbose)
-    cout << endl;
-
-  // print out the result
-  cout << "Target curve" << endl;
-  cout << "a * exp(-lambda * x) + b" << endl;
-  cout << "Iterative least squares solution" << endl;
-  cout << "a      = " << params->estimate()(0) << endl;
-  cout << "b      = " << params->estimate()(1) << endl;
-  cout << "lambda = " << params->estimate()(2) << endl;
-  cout << endl;
-
+        if (verbose)
+            cout << endl;
+        for (int i = 0; i < numPoints; ++i) {
+            error+= pow(params->estimate()(0) * exp(- params->estimate()(2)*points[i].x() ) - params->estimate()(1) - points[i].y(),2);
+        }
+        // print out the result
+        //cout << "Target curve" << endl;
+        //cout << "a * exp(-lambda * x) + b" << endl;
+        //cout << "Iterative least squares solution" << endl;
+        cout << "a      = " << params->estimate()(0) << ";"<<endl;
+        cout << "b      = " << params->estimate()(1) << ";"<<endl;
+        cout << "error  = " << error                 << ";"<<endl;
+        cout << "lambda = " << params->estimate()(2) << ";"<<endl;
+        delete[] points;
+        error=0;
+        cout << "x=0:0.1:5;"<<endl;
+        cout << "[X,Y] = meshgrid( x );" << endl;
+        cout << "Z=a * exp(- lambda *sqrt(X.^2+Y.^2)) + b;" <<endl;
+        cout << "h=mesh(X,Y,Z);" <<endl;
+        cout << "hold on" <<endl;
+        cout << "c1=get(h,\"Facecolor\");" <<endl;
+        cout << "plot3(y(:,1),y(:,2),y(:,3),\"o\");" <<endl;
+        cout << "legend(\"data_set\");" <<endl;
+    }
   // clean up
-  delete[] points;
 
   return 0;
 }
