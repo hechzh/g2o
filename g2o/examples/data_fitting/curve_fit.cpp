@@ -115,7 +115,6 @@ class EdgePointOnCurve : public g2o::BaseUnaryEdge<1, Eigen::Vector2d, VertexPar
 int main(int argc, char** argv)
 {
     double inf=0.01;
-    double error=0;
     for (int j=0 ;j<10;++j) {
         int numPoints;
         int maxIterations;
@@ -195,19 +194,14 @@ int main(int argc, char** argv)
 
         if (verbose)
             cout << endl;
-        for (int i = 0; i < numPoints; ++i) {
-            error+= pow(params->estimate()(0) * exp(- params->estimate()(2)*points[i].x() ) - params->estimate()(1) - points[i].y(),2);
-        }
         // print out the result
         //cout << "Target curve" << endl;
         //cout << "a * exp(-lambda * x) + b" << endl;
         //cout << "Iterative least squares solution" << endl;
         cout << "a      = " << params->estimate()(0) << ";"<<endl;
         cout << "b      = " << params->estimate()(1) << ";"<<endl;
-        cout << "error  = " << error                 << ";"<<endl;
         cout << "lambda = " << params->estimate()(2) << ";"<<endl;
         delete[] points;
-        error=0;
         cout << "x=0:0.1:5;"<<endl;
         cout << "[X,Y] = meshgrid( x );" << endl;
         cout << "Z=a * exp(- lambda *sqrt(X.^2+Y.^2)) + b;" <<endl;

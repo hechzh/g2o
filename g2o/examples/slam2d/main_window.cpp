@@ -26,6 +26,7 @@
 
 #include <fstream>
 #include <iostream>
+
 using namespace std;
 
 MainWindow::MainWindow(QWidget * parent, Qt::WindowFlags flags) :
